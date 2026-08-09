@@ -1,6 +1,7 @@
 name: Publish TATCEP 23P
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - '.github/workflows/publish-tatcep.yml'
