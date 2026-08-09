@@ -28,8 +28,10 @@ jobs:
           test "$(sha256sum lineage.png | awk '{print $1}')" = 'a584ff681fd38c9a6c7b01df596d8edd80d528c51468efe1092d6f6251dea757'
 
       - name: Build tatcep/index.html and update README
-        shell: python
+        shell: bash
         run: |
+          set -euo pipefail
+          python - <<'PY'
           from pathlib import Path
           import base64, re
 
@@ -52,8 +54,7 @@ jobs:
               r'("[^>]*>)',
               re.S,
           )
-          replacement = r'\1' + 'data:image/png;base64,' + png64 + r'\2'
-          html2, n = pattern.subn(replacement, html, count=1)
+          html2, n = pattern.subn(r'\1' + 'data:image/png;base64,' + png64 + r'\2', html, count=1)
           if n != 1:
               raise SystemExit(f'Expected exactly one p23 image replacement; got {n}')
 
@@ -79,6 +80,7 @@ jobs:
                   raise SystemExit('README site marker not found')
               text = text.replace(marker, marker + addition)
           readme.write_text(text, encoding='utf-8')
+          PY
 
       - name: Commit publication
         shell: bash
