@@ -1,0 +1,92 @@
+name: Publish TATCEP 23P
+
+on:
+  push:
+    paths:
+      - '.github/workflows/publish-tatcep.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download verified lineage image
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --retry-delay 2 \
+            'https://drive.usercontent.google.com/download?id=14AYQjfsEL-6s7xiF0kXNsyCWATrk-6ZK&export=download&confirm=t' \
+            -o lineage.png
+          test "$(sha256sum lineage.png | awk '{print $1}')" = 'a584ff681fd38c9a6c7b01df596d8edd80d528c51468efe1092d6f6251dea757'
+
+      - name: Build tatcep/index.html and update README
+        shell: python
+        run: |
+          from pathlib import Path
+          import base64, re
+
+          source = Path('TATCEP Portfolio.html')
+          if not source.exists():
+              raise SystemExit('Missing TATCEP Portfolio.html')
+
+          html = source.read_text(encoding='utf-8')
+          if '01 / 23' not in html or 'RUNTIME EVIDENCE' not in html:
+              raise SystemExit('Unexpected TATCEP base file')
+
+          sections = re.findall(r'data-page="(\d+)"', html)
+          if len(sections) != 23 or sections[0] != '1' or sections[-1] != '23':
+              raise SystemExit(f'Unexpected page structure: {sections[:3]} ... {sections[-3:]} count={len(sections)}')
+
+          png64 = base64.b64encode(Path('lineage.png').read_bytes()).decode('ascii')
+          pattern = re.compile(
+              r'(<section class="paper-page landscape-page" id="p23" data-page="23">\s*<img src=")'
+              r'data:image/[^;]+;base64,[^"]+'
+              r'("[^>]*>)',
+              re.S,
+          )
+          replacement = r'\1' + 'data:image/png;base64,' + png64 + r'\2'
+          html2, n = pattern.subn(replacement, html, count=1)
+          if n != 1:
+              raise SystemExit(f'Expected exactly one p23 image replacement; got {n}')
+
+          out = Path('tatcep/index.html')
+          out.parent.mkdir(parents=True, exist_ok=True)
+          out.write_text(html2, encoding='utf-8')
+
+          check = out.read_text(encoding='utf-8')
+          if check.count('data-page=') != 23:
+              raise SystemExit('Output page count validation failed')
+          if 'id="p02"' not in check or 'RUNTIME EVIDENCE' not in check:
+              raise SystemExit('P2 runtime viewer validation failed')
+          if not re.search(r'id="p23"[\s\S]*?src="data:image/png;base64,', check):
+              raise SystemExit('P23 PNG validation failed')
+
+          readme = Path('README.md')
+          text = readme.read_text(encoding='utf-8')
+          text = text.replace('interactive 22-page AI governance portfolio', 'interactive 23-page AI governance portfolio')
+          marker = 'GitHub Pages entry: `index.html`'
+          addition = '\n\nFull TATCEP case (23 pages): `tatcep/`'
+          if 'Full TATCEP case (23 pages): `tatcep/`' not in text:
+              if marker not in text:
+                  raise SystemExit('README site marker not found')
+              text = text.replace(marker, marker + addition)
+          readme.write_text(text, encoding='utf-8')
+
+      - name: Commit publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f lineage.png
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tatcep/index.html README.md
+          git diff --cached --quiet && exit 0
+          git commit -m 'Publish TATCEP 23-page case'
+          git push origin HEAD:main
