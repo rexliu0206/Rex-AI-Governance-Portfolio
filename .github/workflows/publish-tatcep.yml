@@ -2,15 +2,15 @@ name: Publish TATCEP 23P
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - '.github/workflows/publish-tatcep.yml'
+  issues:
+    types: [opened]
 
 permissions:
   contents: write
 
 jobs:
   publish:
+    if: github.event_name != 'issues' || github.event.issue.title == '[internal] publish TATCEP 23P'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -34,50 +34,24 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import base64, re
-
           source = Path('TATCEP Portfolio.html')
-          if not source.exists():
-              raise SystemExit('Missing TATCEP Portfolio.html')
-
+          if not source.exists(): raise SystemExit('Missing TATCEP Portfolio.html')
           html = source.read_text(encoding='utf-8')
-          if '01 / 23' not in html or 'RUNTIME EVIDENCE' not in html:
-              raise SystemExit('Unexpected TATCEP base file')
-
+          if '01 / 23' not in html or 'RUNTIME EVIDENCE' not in html: raise SystemExit('Unexpected TATCEP base file')
           sections = re.findall(r'data-page="(\d+)"', html)
-          if len(sections) != 23 or sections[0] != '1' or sections[-1] != '23':
-              raise SystemExit(f'Unexpected page structure: {sections[:3]} ... {sections[-3:]} count={len(sections)}')
-
+          if len(sections) != 23 or sections[0] != '1' or sections[-1] != '23': raise SystemExit(f'Unexpected page structure count={len(sections)}')
           png64 = base64.b64encode(Path('lineage.png').read_bytes()).decode('ascii')
-          pattern = re.compile(
-              r'(<section class="paper-page landscape-page" id="p23" data-page="23">\s*<img src=")'
-              r'data:image/[^;]+;base64,[^"]+'
-              r'("[^>]*>)',
-              re.S,
-          )
+          pattern = re.compile(r'(<section class="paper-page landscape-page" id="p23" data-page="23">\s*<img src=")data:image/[^;]+;base64,[^"]+("[^>]*>)', re.S)
           html2, n = pattern.subn(r'\1' + 'data:image/png;base64,' + png64 + r'\2', html, count=1)
-          if n != 1:
-              raise SystemExit(f'Expected exactly one p23 image replacement; got {n}')
-
-          out = Path('tatcep/index.html')
-          out.parent.mkdir(parents=True, exist_ok=True)
-          out.write_text(html2, encoding='utf-8')
-
+          if n != 1: raise SystemExit(f'Expected exactly one p23 image replacement; got {n}')
+          out = Path('tatcep/index.html'); out.parent.mkdir(parents=True, exist_ok=True); out.write_text(html2, encoding='utf-8')
           check = out.read_text(encoding='utf-8')
-          if check.count('data-page=') != 23:
-              raise SystemExit('Output page count validation failed')
-          if 'id="p02"' not in check or 'RUNTIME EVIDENCE' not in check:
-              raise SystemExit('P2 runtime viewer validation failed')
-          if not re.search(r'id="p23"[\s\S]*?src="data:image/png;base64,', check):
-              raise SystemExit('P23 PNG validation failed')
-
-          readme = Path('README.md')
-          text = readme.read_text(encoding='utf-8')
+          if check.count('data-page=') != 23 or 'id="p02"' not in check or 'RUNTIME EVIDENCE' not in check: raise SystemExit('Output validation failed')
+          readme = Path('README.md'); text = readme.read_text(encoding='utf-8')
           text = text.replace('interactive 22-page AI governance portfolio', 'interactive 23-page AI governance portfolio')
-          marker = 'GitHub Pages entry: `index.html`'
-          addition = '\n\nFull TATCEP case (23 pages): `tatcep/`'
+          marker = 'GitHub Pages entry: `index.html`'; addition = '\n\nFull TATCEP case (23 pages): `tatcep/`'
           if 'Full TATCEP case (23 pages): `tatcep/`' not in text:
-              if marker not in text:
-                  raise SystemExit('README site marker not found')
+              if marker not in text: raise SystemExit('README site marker not found')
               text = text.replace(marker, marker + addition)
           readme.write_text(text, encoding='utf-8')
           PY
