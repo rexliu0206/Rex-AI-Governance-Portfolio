@@ -2,7 +2,7 @@
 
 Public portfolio site for Rex Liu.
 
-This repository hosts the current interactive 22-page AI governance portfolio. Page 2 includes a continuous runtime-evidence viewer with contextual anchors.
+This repository hosts the current interactive 23-page AI governance portfolio. Page 2 includes a continuous runtime-evidence viewer with contextual anchors.
 
 ## Scope
 
